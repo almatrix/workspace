@@ -152,10 +152,35 @@ dev.off()
 
 
 ####### frequency domain
-png(paste0(basedir,"img\\plot_freq.png"),width=1000)
-globalfre = spec.pgram(DF_date_hour$prop)
+globalfre = spec.pgram(DF_date_hour$prop, plot=FALSE)
+png(paste0(basedir,"img\\plot_freq.png"))
+plot(globalfre[["freq"]][1:180],globalfre[["spec"]][1:180], 
+     type="l", main="Global frequency-spectrum",
+     xlab="Frequency", ylab="Spectrum")
 dev.off()
 
+L_date_hour_category=split(DF_date_hour_category,DF_date_hour_category$cate_l1)
+png(paste0(basedir,"img\\plot_freq_category.png"),width=1000)
+par(mfrow=c(2,5))
+temp = lapply(seq_along(L_date_hour_category), function(i){
+    fre = spec.pgram(L_date_hour_category[[i]]$prop, plot=FALSE)
+    plot(fre[["freq"]][1:180], fre[["spec"]][1:180], 
+         type="l", main= names(L_date_hour_category[i]),
+         xlab="Frequency", ylab="Spectrum")
+    })
+dev.off()
+
+
+L_diff=split(DF_diff,DF_diff$cate_l1)
+png(paste0(basedir,"img\\plot_diff_freq_category.png"),width=1000)
+par(mfrow=c(2,5))
+temp = lapply(seq_along(L_diff), function(i){
+    fre = spec.pgram(L_diff[[i]]$difference, plot=FALSE)
+    plot(fre[["freq"]][1:180], fre[["spec"]][1:180], 
+         type="l", main= names(L_diff[i]),
+         xlab="Frequency", ylab="Spectrum")
+})
+dev.off()
 
 
 ################
