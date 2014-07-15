@@ -16,20 +16,36 @@ source("fun\\DBconn.R")
 basedir = "D:\\Experiments\\R\\"
 
 ## load data
-DF_all = read.csv( paste0(basedir, "data\\allcheckins.csv"), 
-                header=TRUE, sep=",", nrows=20000,
+DF_all = read.csv( paste0(basedir, "data\\allcheckins_old.csv"), 
+                header=TRUE, sep=",", nrows=2000,
                 colClasses = c("numeric","numeric","numeric","character",
                                 "numeric","character","character","character")
                 )
 ## add additional columns
 DF_all$datetime = strptime( strtrim(DF_all$time_str,19), format="%Y-%m-%d %H:%M:%S")
-DF_all$hour = format(DF_all$datetime,"%H")
+DF_all$hour = as.numeric(format(DF_all$datetime,"%H"))
 DF_all$yearday = format(DF_all$datetime,"%j")
 DF_all$weekday = ifelse(
     (format(DF_all$datetime,"%w")>5 | format(DF_all$datetime,"%w")<1),
     "Weekend", "Workday")
 
+################################################################################
+# test of nultinomial logistic regression
+################################################################################
+# y: cate_l1; x: hour, weekday
+test1 <- multinom(cate_l1 ~ hour + weekday, data = DF_all)
+summ1 = summary(test1)
+z1 <- summ1$coefficients/summ1$standard.errors
+p1 <- (1 - pnorm(abs(z1), 0, 1)) * 2
+pp1 <- fitted(test1)
+ppp1 <- apply(pp1,1,function(x) { which(x==max(x)) })
 
+
+
+
+
+
+################################################################################
 ########### statistics for this dataset ###########
 
 ## phase 1: category and date combined, statistics by hour 
