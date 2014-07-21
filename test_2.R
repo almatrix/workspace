@@ -2,16 +2,7 @@
 library(scales)
 library(ggplot2)
 
-library(TSA)
-
-library(DBI)
-library(RPostgreSQL)
-
 library(nnet)
-
-source("fun\\TableOperations.R")
-source("fun\\GenerateStatsDataFrame.R")
-source("fun\\DBconn.R")
 
 ## data directory (external directory for input and output)
 basedir = "D:\\Experiments\\R\\"
@@ -23,26 +14,20 @@ basedir = "D:\\Experiments\\R\\"
 ################################################################################
 ## load data
 DF_checkin = read.csv( paste0(basedir, "data\\allcheckins.csv"), 
-                       header=TRUE, sep=",", nrows=400,  
-                       colClasses = c("character","numeric","character",
+                       header=TRUE, sep=",", nrows=20000,  
+                       na.strings = "none",
+                       colClasses = c("numeric","numeric","factor",
                                       "character", "numeric","numeric",
-                                      "numeric","character","character",
-                                      "character")
+                                      "numeric","character","factor",
+                                      "factor")
                        )
 DF_weather = read.csv( paste0(basedir, "data\\weather.csv"), 
-                       header=TRUE, sep=",", 
+                       header=TRUE, sep=",", na.strings = c("-9999","Unknown"),
                        colClasses = c("numeric","numeric","numeric","character",
                                       "numeric","character","numeric","numeric",
                                       "numeric")
                        )
-## deal with time 
-DF_checkin$datetime = strptime( strtrim(DF_checkin$localtime,19), 
-                                format="%Y-%m-%d %H:%M:%S")
-DF_checkin$hour = as.numeric(format(DF_checkin$datetime,"%H"))
-DF_checkin$yearday = format(DF_checkin$datetime,"%j")
-DF_checkin$isweekend = ifelse(
-    (format(DF_checkin$datetime,"%w")>5 | format(DF_checkin$datetime,"%w")<1),
-    "Weekend", "Workday")
+
 ## the influence time of each weather record
 obs_time = DF_weather$timestamps
 nxt_obs_time = c(obs_time[-1],(tail(obs_time,1)+3600))
@@ -61,6 +46,16 @@ for(i in 1:nrow(DF_checkin)){
 } 
 DF_checkin_weather = merge(x=DF_checkin, y=DF_weather, 
                            by.x="weather_id", by.y="id", all.X=TRUE)
+rm(DF_checkin)
+## deal with time 
+DF_checkin_weather$datetime = strptime( strtrim(DF_checkin_weather$localtime.x,19), 
+                                format="%Y-%m-%d %H:%M:%S")
+DF_checkin_weather$hour = as.factor(format(DF_checkin_weather$datetime,"%H"))
+DF_checkin_weather$yearday = as.factor(format(DF_checkin_weather$datetime,"%j"))
+DF_checkin_weather$isweekend = as.factor(ifelse(
+    (format(DF_checkin_weather$datetime,"%w")>5 | 
+         format(DF_checkin_weather$datetime,"%w")<1),
+    "Weekend", "Workday"))
 # remove the unnecessary columns
 DF_checkin_weather$weather_id = NULL
 DF_checkin_weather$localtime.x = NULL
@@ -71,8 +66,41 @@ DF_checkin_weather$timestamps.y = NULL
 DF_checkin_weather$influ_ts = NULL
 DF_checkin_weather$influ_te = NULL
 
-
 ################################################################################
 # analysis with DF_checkin_weather
 ################################################################################
-test = DF_checkin_weather
+
+################################################################################
+# multinominal logistic regression model
+################################################################################
+tmodel<-multinom(cate_l1~conds+hour+isweekend,
+                 data=DF_checkin_weather,maxit = 300)
+tsummary = summary(tmodel)
+# The multinom package does not include p-value calculation for the regression 
+# coefficients, so we calculate p-values using Wald tests (here z-tests).
+z = tsummary$coefficients/tsummary$standard.errors
+# 2-tailed z test
+p = (1 - pnorm(abs(z), 0, 1)) * 2
+
+################################################################################
+# chi-square correlation test: hour - venue_category
+dfmat_hour_cate = as.data.frame.matrix(
+    with(DF_checkin_weather, table(hour, cate_l1)))
+mat_hour_cate = as.matrix(dfmat_hour_cate)
+chi_hour_cate = chisq.test(mat_hour_cate)
+# output:
+# Pearson's Chi-squared test
+# data:  mat_hour_cate_2
+# X-squared = 5579.292, df = 207, p-value < 2.2e-16
+################################################################################
+
+################################################################################
+# chi-square correlation test: hour - venue_category
+dfmat_conds_cate = as.data.frame.matrix(
+    with(DF_checkin_weather, table(conds, cate_l1)))
+dfmat_conds_cate=dfmat_conds_cate[-3,]  # remove "Heavy Snow"
+mat_conds_cate = as.matrix(dfmat_conds_cate)
+chi_conds_cate = chisq.test(mat_conds_cate)
+# output:
+# X-squared = 1483.779, df = 90, p-value < 2.2e-16
+################################################################################
