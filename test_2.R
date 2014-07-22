@@ -1,7 +1,6 @@
 ## load libraries and functions
 library(scales)
 library(ggplot2)
-
 library(nnet)
 
 ## data directory (external directory for input and output)
@@ -13,8 +12,8 @@ basedir = "D:\\Experiments\\R\\"
 # join weather data with checkin data
 ################################################################################
 ## load data
-DF_checkin = read.csv( paste0(basedir, "data\\allcheckins.csv"), 
-                       header=TRUE, sep=",", nrows=20000,  
+DF_checkin = read.csv( paste0(basedir, "data\\userA.csv"), 
+                       header=TRUE, sep=",", #nrows=100000,  
                        na.strings = "none",
                        colClasses = c("numeric","numeric","factor",
                                       "character", "numeric","numeric",
@@ -24,9 +23,15 @@ DF_checkin = read.csv( paste0(basedir, "data\\allcheckins.csv"),
 DF_weather = read.csv( paste0(basedir, "data\\weather.csv"), 
                        header=TRUE, sep=",", na.strings = c("-9999","Unknown"),
                        colClasses = c("numeric","numeric","numeric","character",
-                                      "numeric","character","numeric","numeric",
-                                      "numeric")
+                                      "numeric","factor","numeric","numeric",
+                                      "numeric","numeric","numeric","numeric",
+                                      "numeric","numeric")
                        )
+DF_weather$fog=as.logical(DF_weather$fog)
+DF_weather$rain=as.logical(DF_weather$rain)
+DF_weather$snow=as.logical(DF_weather$snow)
+DF_weather$thunder=as.logical(DF_weather$thunder)
+DF_weather$tornado=as.logical(DF_weather$tornado)
 
 ## the influence time of each weather record
 obs_time = DF_weather$timestamps
@@ -44,6 +49,7 @@ for(i in 1:nrow(DF_checkin)){
         "id"]
     DF_checkin[i,"weather_id"] = weather_id
 } 
+rm(i,weather_id)
 DF_checkin_weather = merge(x=DF_checkin, y=DF_weather, 
                            by.x="weather_id", by.y="id", all.X=TRUE)
 rm(DF_checkin)
@@ -51,7 +57,8 @@ rm(DF_checkin)
 DF_checkin_weather$datetime = strptime( strtrim(DF_checkin_weather$localtime.x,19), 
                                 format="%Y-%m-%d %H:%M:%S")
 DF_checkin_weather$hour = as.factor(format(DF_checkin_weather$datetime,"%H"))
-DF_checkin_weather$yearday = as.factor(format(DF_checkin_weather$datetime,"%j"))
+DF_checkin_weather$yearday = format(DF_checkin_weather$datetime,"%j")
+DF_checkin_weather$weekday = as.factor(format(DF_checkin_weather$datetime,"%w"))
 DF_checkin_weather$isweekend = as.factor(ifelse(
     (format(DF_checkin_weather$datetime,"%w")>5 | 
          format(DF_checkin_weather$datetime,"%w")<1),
@@ -72,15 +79,51 @@ DF_checkin_weather$influ_te = NULL
 
 ################################################################################
 # multinominal logistic regression model
-################################################################################
-tmodel<-multinom(cate_l1~conds+hour+isweekend,
-                 data=DF_checkin_weather,maxit = 300)
+tmodel<-multinom(cate_l2~hour+isweekend+fog+snow+rain,
+                 data=DF_checkin_weather,maxit = 500)
 tsummary = summary(tmodel)
 # The multinom package does not include p-value calculation for the regression 
 # coefficients, so we calculate p-values using Wald tests (here z-tests).
 z = tsummary$coefficients/tsummary$standard.errors
 # 2-tailed z test
 p = (1 - pnorm(abs(z), 0, 1)) * 2
+expcoef = exp(coef(tmodel))
+pp = fitted(tmodel)
+
+## ref: http://www.r-bloggers.com/how-to-multinomial-regression-models-in-r/
+predictMNL <- function(model, newdata) {
+    
+    # Only works for neural network models
+    if (is.element("nnet",class(model))) {
+        # Calculate the individual and cumulative probabilities
+        probs <- predict(model,newdata,"probs")
+        cum.probs <- t(apply(probs,1,cumsum))
+        
+        # Draw random values
+        vals <- runif(nrow(newdata))
+        
+        # Join cumulative probabilities and random draws
+        tmp <- cbind(cum.probs,vals)
+        
+        # For each row, get choice index.
+        k <- ncol(probs)
+        ids <- 1 + apply(tmp,1,function(x) length(which(x[1:k] < x[k+1])))
+        
+        # Return the values
+        return(ids)
+    }
+}
+
+##
+newdata=DF_checkin_weather
+newdata["cate_l1"]=NULL
+y2 <- predictMNL(tmodel,newdata)
+y3 <- predictMNL(tmodel,newdata)
+comp = data.frame(DF_checkin_weather$cate_l1, 
+                  levels(DF_checkin_weather$cate_l1)[y2],
+                  levels(DF_checkin_weather$cate_l1)[y3])
+comp$correct= ifelse(comp[1]==comp[2],1,0)
+comp$correctu= ifelse(comp[1]==comp[2]|comp[1]==comp[3],1,0)
 
 ################################################################################
 # chi-square correlation test: hour - venue_category
