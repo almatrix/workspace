@@ -16,33 +16,37 @@ source("fun\\DBconn.R")
 basedir = "D:\\Experiments\\R\\"
 
 ## load data
-DF_all = read.csv( paste0(basedir, "data\\allcheckins_old.csv"), 
-                header=TRUE, sep=",", nrows=2000,
-                colClasses = c("numeric","numeric","numeric","character",
-                                "numeric","character","character","character")
-                )
-## add additional columns
-DF_all$datetime = strptime( strtrim(DF_all$time_str,19), format="%Y-%m-%d %H:%M:%S")
-DF_all$hour = as.numeric(format(DF_all$datetime,"%H"))
+# DF_all = read.csv( paste0(basedir, "data\\allcheckins_old.csv"), 
+#                 header=TRUE, sep=",", nrows=2000,
+#                 colClasses = c("numeric","numeric","numeric","character",
+#                                 "numeric","character","character","character")
+#                 )
+# ## add additional columns
+# DF_all$datetime = strptime( strtrim(DF_all$time_str,19), format="%Y-%m-%d %H:%M:%S")
+# DF_all$hour = as.numeric(format(DF_all$datetime,"%H"))
+# DF_all$yearday = format(DF_all$datetime,"%j")
+# DF_all$weekday = ifelse(
+#     (format(DF_all$datetime,"%w")>5 | format(DF_all$datetime,"%w")<1),
+#     "Weekend", "Workday")
+
+DF_all = read.csv( paste0(basedir, "data\\allcheckins.csv"), 
+                       header=TRUE, sep=",", nrows=529931,  
+                       na.strings = "none",
+                       colClasses = c("numeric","numeric","factor",
+                                      "factor", "numeric","numeric",
+                                      "numeric","character","factor",
+                                      "factor")
+)
+DF_all$datetime = strptime( strtrim(DF_all$localtime,19), 
+                                format="%Y-%m-%d %H:%M:%S")
+
+## deal with time 
+DF_all$hour = as.factor(format(DF_all$datetime,"%H"))
 DF_all$yearday = format(DF_all$datetime,"%j")
-DF_all$weekday = ifelse(
-    (format(DF_all$datetime,"%w")>5 | format(DF_all$datetime,"%w")<1),
-    "Weekend", "Workday")
-
-################################################################################
-# test of nultinomial logistic regression
-################################################################################
-# y: cate_l1; x: hour, weekday
-test1 <- multinom(cate_l1 ~ hour + weekday, data = DF_all)
-summ1 = summary(test1)
-z1 <- summ1$coefficients/summ1$standard.errors
-p1 <- (1 - pnorm(abs(z1), 0, 1)) * 2
-pp1 <- fitted(test1)
-ppp1 <- apply(pp1,1,function(x) { which(x==max(x)) })
-
-
-
-
+DF_all$weekday = format(DF_all$datetime,"%w")
+DF_all$isweekend = as.factor(ifelse(
+    ( DF_all$weekday>5 ),"Saturday", 
+    ifelse( ( DF_all$weekday<1 ),"Sunday","Workday")))
 
 
 ################################################################################

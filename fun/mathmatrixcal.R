@@ -27,7 +27,9 @@ copylastcheckinrec = function(df){
     checkinrec = df$cate_l1
     len = length(checkinrec)    
     #df$last_cate_l1 = cate_l1_levels[c(checkinrec[1], checkinrec[1:len-1])]
-    df$last_cate_l1 = c(checkinrec[1], checkinrec[1:len-1])
+    #df$last_cate_l1 = c(checkinrec[1], checkinrec[1:len-1])
+    df$last_cate_l1=checkinrec
+    df$last_cate_l1[2:len]=checkinrec[1:len-1]
     
     timerec = df$timestamps.x
     lst_time = c(timerec[1], timerec[1:len-1])
@@ -61,3 +63,25 @@ joindfsbytime =  function(df_base,df_ref){
     
     df_res
 }
+
+### begin copying script here
+likelihood.test = function(x) {
+    nrows = dim(x)[1]                      # no. of rows in contingency table
+    ncols = dim(x)[2]                      # no. of cols in contingency table
+    chi.out = chisq.test(x,correct=F)      # do a Pearson chi square test
+    table = chi.out[[6]]                   # get the OFs
+    ratios = chi.out[[6]]/chi.out[[7]]     # calculate OF/EF ratios
+    sum = 0                                # storage for the test statistic
+    for (i in 1:nrows) {
+        for (j in 1:ncols) {
+            sum = sum + table[i,j]*log(ratios[i,j])
+        }
+    }
+    sum = 2 * sum                          # the likelihood ratio chi square
+    df = chi.out[[2]]                      # degrees of freedom
+    p = 1 - pchisq(sum,df)                 # p-value
+    out = c(sum, df, p, chi.out[[1]])      # the output vector
+    names(out) = c("LR-chisq","df","p-value","Pears-chisq")
+    round(out,4)                           # done!
+}
+### end copying script here
