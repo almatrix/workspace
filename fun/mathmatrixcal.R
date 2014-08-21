@@ -22,18 +22,23 @@ setweatherinfluence = function(df_weather){
     df_weather
 }
 
-copylastcheckinrec = function(df){
+copylastcheckinrec = function(df, samesize=TRUE){
     
-    checkinrec = df$cate_l1
+    checkinrec = df$cate_l2
     len = length(checkinrec)    
     #df$last_cate_l1 = cate_l1_levels[c(checkinrec[1], checkinrec[1:len-1])]
     #df$last_cate_l1 = c(checkinrec[1], checkinrec[1:len-1])
-    df$last_cate_l1=checkinrec
-    df$last_cate_l1[2:len]=checkinrec[1:len-1]
+    df$last_cate_l2=checkinrec
+    df$last_cate_l2[2:len]=checkinrec[1:len-1]
     
     timerec = df$timestamps.x
     lst_time = c(timerec[1], timerec[1:len-1])
     df$time_diff= timerec - lst_time
+    
+    if(!samesize){
+        df = cbind(last_cate = df[2:len,"last_cate_l2"], cate = df[2:len,"cate_l2"], 
+                   time_diff = df[2:len,"time_diff"])
+    }
     
     df
 }
@@ -62,6 +67,25 @@ joindfsbytime =  function(df_base,df_ref){
     df_res$influ_te = NULL
     
     df_res
+}
+
+
+
+
+
+categorizedhour <- function(v.hour){
+    ans=vector(length=0)
+    temp.hour=c("00","01","02","03","04","05","06","07","08","09","10","11",
+                "12","13","14","15","16","17","18","19","20","21","22","23")
+    temp.catehour = c("23-01","01-04","01-04","01-04","04-07",
+                      "04-07","04-07","07-09","07-09","09-11",
+                      "09-11","11-13","11-13","13-15","13-15","15-18",
+                      "15-18","15-18","18-19","19-20","20-21",
+                      "21-23","21-23","23-01")
+    for(i in v.hour){
+        ans = c(ans, temp.catehour[which(temp.hour==i)])
+    }
+    ans
 }
 
 ### begin copying script here

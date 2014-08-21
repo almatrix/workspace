@@ -10,7 +10,7 @@ library(RPostgreSQL)
 source("fun\\TableOperations.R")
 source("fun\\GenerateStatsDataFrame.R")
 source("fun\\DBconn.R")
-
+load("D:\\Experiments\\R\\data\\checkin_global_0813.Rda")
 
 ## data directory (external directory for input and output)
 basedir = "D:\\Experiments\\R\\"
@@ -48,6 +48,7 @@ DF_all$isweekend = as.factor(ifelse(
     ( DF_all$weekday>5 ),"Saturday", 
     ifelse( ( DF_all$weekday<1 ),"Sunday","Workday")))
 
+#save(DF_all,file="D:\\Experiments\\R\\data\\checkin_global_0813.Rda")
 
 ################################################################################
 ########### statistics for this dataset ###########
@@ -250,11 +251,14 @@ plot(globalfre[["freq"]][1:180],globalfre[["spec"]][1:180],
 dev.off()
 
 L_date_hour_category=split(DF_date_hour_category,DF_date_hour_category$cate_l1)
-png(paste0(basedir,"img\\plot_freq_category.png"),width=1000)
-par(mfrow=c(2,5))
+ppi <- 300
+png(paste0(basedir,"img\\plot_freq_category.png"), width = 8*ppi, height = 6*ppi, res=ppi)
+#win.metafile(paste0(basedir,"img\\plot_freq_category.wmf"))
+#cairo_ps(paste0(basedir,"img\\plot_freq_category.eps"),onefile = TRUE)
+par(mfrow=c(3,4))
 temp = lapply(seq_along(L_date_hour_category), function(i){
     fre = spec.pgram(L_date_hour_category[[i]]$prop, plot=FALSE)
-    plot(fre[["freq"]][1:180], fre[["spec"]][1:180], 
+    plot(fre[["freq"]][1:400], fre[["spec"]][1:400], 
          type="l", main= names(L_date_hour_category[i]),
          xlab="Frequency", ylab="Spectrum")
     })

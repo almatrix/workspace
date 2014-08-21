@@ -1,0 +1,185 @@
+---
+title: 'checkin data: global analysis'
+author: "Ming Li"
+date: "Wednesday, August 13, 2014"
+output: word_document
+---
+```{r, echo=FALSE}
+source("D:\\GitRepos\\work\\fun\\mathmatrixcal.R")
+basedir = "D:\\Experiments\\R\\"
+```
+
+Based on the [summarization](checkin-analysis-summarize.html/) of [previous work](checkin-analysis.html/), we want to perform similar exploratory analysis in a global scale. 
+
+The assumption is: despite the sparsity of any single users, the gloabl dataset will express some relevant patterns that might be hidden from single users, because of **LLN**.
+
+***********
+#### 1. chi-square for temporal and meteorological
+
+Load the data. 
+```{r,eval=FALSE}
+## checkin data
+## nrows=529931 ~~ 19 weeks/133 days's data
+checkin.global = read.csv( paste0(basedir, "data\\allcheckins.csv"), 
+                       header=TRUE, sep=",", nrows=529931, na.strings = "none",
+                       colClasses = c("numeric","numeric","factor","factor", "numeric","numeric",
+                                      "numeric","character","factor","factor")
+)
+checkin.global$datetime = strptime( strtrim(checkin.global$localtime,19), format="%Y-%m-%d %H:%M:%S")
+
+## weather data 
+weather = read.csv( paste0(basedir, "data\\weather.csv"), 
+                       header=TRUE, sep=",", na.strings = c("-9999","Unknown"),
+                       colClasses = c("numeric","numeric","numeric","character","numeric","factor",
+                                      "numeric","numeric","numeric","numeric","numeric","numeric",
+                                      "numeric","numeric")
+)
+## deal with logical data
+weather$fog=as.logical(weather$fog)
+weather$rain=as.logical(weather$rain)
+weather$snow=as.logical(weather$snow)
+weather$thunder=as.logical(weather$thunder)
+weather$tornado=as.logical(weather$tornado)
+
+## join checkin data with weather data based on timestamps 
+checkin.global = joindfsbytime(checkin.global, weather)
+
+## deal with time 
+checkin.global$hour = as.factor(format(checkin.global$datetime,"%H"))
+checkin.global$yearday = format(checkin.global$datetime,"%j")
+checkin.global$weekday = format(checkin.global$datetime,"%w")
+checkin.global$isweekend = as.factor(ifelse( ( checkin.global$weekday>5 ), "Saturday", 
+    ifelse( ( checkin.global$weekday<1 ),"Sunday","Workday")))
+
+## add record for last checkin
+# checkin.global = copylastcheckinrec(checkin.global)
+checkin.global = checkin.global[complete.cases(checkin.global$conds),]
+```
+
+```{r,echo=FALSE}
+## save(checkin.global,file="D:\\Experiments\\R\\data\\checkin_global_0813.Rda")
+## the data from the above procedure has been saved for convenience.
+load("D:\\Experiments\\R\\data\\checkin_global_0813.Rda")
+```
+
+Again, chi-square test:
+```{r}
+# venue_cate v.s. hour of day
+cate.hour = xtabs(~hour+cate_l1, data=checkin.global)
+chisq.test(cate.hour)
+# venue_cate v.s. weekend/workday
+cate.weekend = xtabs(~isweekend+cate_l2, data=checkin.global)
+chisq.test(cate.weekend)
+# venue_cate v.s. weather condition
+cate.conds = xtabs(~conds+cate_l1, data=checkin.global)
+cate.conds = as.table(cate.conds[rowSums(cate.conds)>0,colSums(cate.conds)>0])
+chisq.test(cate.conds)
+#### interactions between factors
+# hour v.s. weekend/workday
+hour.isweekend = xtabs(~hour+isweekend, data=checkin.global)
+chisq.test(hour.isweekend)
+# hour v.s. weather condition
+hour.conds = xtabs(~hour+conds, data=checkin.global)
+hour.conds = as.table(hour.conds[rowSums(hour.conds)>0,colSums(hour.conds)>0])
+chisq.test(hour.conds)
+```
+
+The results shows that there are some interactions between these factors. The hour-weekend interaction can be explained like this: the number of checkins at a given hour of a given weekday cannot be estimated by the marginal checkins in each hour and marginal checkins in Saturday, sunday and workday; they have differnt patterns of checkins across the hour.
+
+Well, this seems to make things even more complicated. However, we still have to move on. 
+
+category with weather:
+```{r}
+# the probability of checkin a category under certain weather conditon
+cate.conds.p=t(apply(cate.conds, 1, function(x) x/sum(x)  ) )
+
+#cate.conds.p.vec = as.vector(cate.conds.p)
+cate.conds.vec = as.vector(cate.conds)
+weather.factor = factor(rep(rownames(cate.conds),10))
+category.factor = factor(rep(colnames(cate.conds),each=14))
+
+#summary(aov(cate.conds.p.vec~weather.factor))
+summary(aov(cate.conds.vec~weather.factor+category.factor))
+```
+
+correspondence analysis
+
+ref:http://www.statmethods.net/advstats/ca.html
+
+```{r}
+library(ca)
+prop.table(cate.conds, 1) # row percentages
+prop.table(cate.conds, 2) # column percentages
+fit <- ca(cate.conds)
+print(fit) # basic results
+summary(fit) # extended results
+#plot(fit) # symmetric map
+ppi <- 72
+png(paste0(basedir,"img\\plot_weather_category_correspondence2.png"), width = 8*ppi, height = 6*ppi, res=ppi)
+plot(fit, mass = TRUE, contrib = "absolute", map =
+   "rowgreen", arrows = c(TRUE, FALSE)) # asymmetric map
+dev.off()
+```
+
+
+***********
+
+#### 2. (temporal weighted) sequential factor
+
+Now consider the sequential factor. The hypothesis is two categories can be more connected if they are usually checked in consecutively. Basically, this should be done by 2nd level category, right? because the 1st level cannot give too much information. 
+
+The foundation approach here is Markov chain. 
+
+first, we should create a data frame that describe the sequences:
+
+```{r,eval=FALSE}
+sequence.list = lapply(split(checkin.global, checkin.global$user_id), function(i){
+    if(nrow(i)>30)
+        copylastcheckinrec(i, samesize=FALSE)
+})
+sequence.list[sapply(sequence.list, is.null)] = NULL
+sequence.global <- as.data.frame( do.call("rbind", sequence.list) )
+sequence.global$weight <- exp( -2 * sequence.global$time_diff / 60 )
+#temp <- lapply(sequence.list, function(i) sequence.global<<-rbind(sequence.global, i))
+```
+
+Note: `do.call("rbind", sequence.list)` combines all the data frame in the list into a data frame.
+
+```{r,echo=FALSE}
+# just in case:
+# save(sequence.global,file="D:\\Experiments\\R\\data\\sequence_global_0813.Rda")
+load("D:\\Experiments\\R\\data\\sequence_global_0813.Rda")
+```
+
+markov chain is based on contingency table; we'd like to do similarly, but the contingency table should be temporally weighted:
+```{r,eval=FALSE}
+unique.cates <- sort(unique(sequence.global$last_cate))
+levels.cates <- levels(checkin.global$cate_l2)
+transition.matrix <- matrix(0,nrow=length(unique.cates),  ncol=length(unique.cates), 
+                            dimnames=list(levels.cates[unique.cates],
+                                          levels.cates[unique.cates]));
+temp = lapply(split(sequence.global, sequence.global$last_cate), function(lst){
+    total.sum <- sum(lst$weight)
+    transition.matrix[ levels.cates[unique(lst$last_cate)], 
+                       levels.cates[sort(unique(lst$cate))] ] <<- 
+        sapply( split(lst, lst$cate), function(cur){ 
+            if(total.sum!=0) { p = sum(cur$weight) / total.sum }
+            else { p = 1/length(unique(lst$cate)) }  ## for all zeros
+            p
+        })
+    NA
+})
+rm(temp)
+```
+
+```{r,eval=FALSE}
+# just in case:
+# save(transition.matrix,file="D:\\Experiments\\R\\data\\transition.matrix_0814.Rda")
+load("D:\\Experiments\\R\\data\\transition.matrix_0814.Rda")
+library(markovchain)
+mcSequence <- new("markovchain",
+                 states = levels.cates[unique(sequence.global$last_cate)],
+                 transitionMatrix = transition.matrix,
+                 name = "sequence")
+predict(object = mcSequence, newdata = c("American Restaurant"),n.ahead = 3)
+```

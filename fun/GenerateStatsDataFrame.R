@@ -96,3 +96,6 @@ stats_by_date_hour <- function(df, category=NA) {
     
     df_date_hour
 }
+
+
+
